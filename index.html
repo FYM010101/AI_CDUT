@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧校园</title>
+
+    <link rel="stylesheet" href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css" />
+    <link rel="stylesheet" href="./css/index.css" />
+
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: '7422db413bb6b561742b8ae38007211a',
+        }
+    </script>
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=2b336f317a9ac782eb6d6e5070ae16c9">
+    </script>
+
+    <script src="./js/store.js"></script>
+
+</head>
+
+<body>
+    <!-- 创建地图容器 -->
+    <div id="container"></div>
+    <!-- 添加信息栏 -->
+    <div class="info">点击地图标记地点</div>
+    <div class="input-card" style="width: 10rem">
+        <h4>推荐路径浏览</h4>
+        <div class="input-item">
+            <button class="btn" onclick="startAnimation()">开始动画</button>
+        </div>
+    </div>
+    <script>
+        // 显示地图
+        var map = new AMap.Map('container', {
+            center: [104.142162, 30.674776],
+            zoom: 18,
+            viewMode: '3D',
+            pitch: 45,
+        })
+        // 添加控件
+        AMap.plugin(['AMap.ToolBar', 'AMap.Scale', 'AMap.ControlBar', 'AMap.GeoJSON', 'AMap.MoveAnimation'], function () {
+            map.addControl(new AMap.ToolBar({
+                position: {
+                    top: '80px',
+                    right: '40px',
+                }
+            }))
+            map.addControl(new AMap.Scale())
+            map.addControl(new AMap.ControlBar())
+            // map.addControl(new AMap.GeoJSON())
+        })
+        // 定义一个全局变量，保存deojson
+        var geojson = new AMap.GeoJSON({
+            geoJSON: null,
+        })
+        // 判断读取到的数据不为空时再导入地图
+        if (JSON.stringify(getData()) != '[]') {
+            geojson.importData(getData())
+            geojson.eachOverlay(function (item) {
+                item.on('click', function (e) {
+                    var ext = item.getExtData()
+                    var click = ++ext._geoJsonProperties.click
+                    var infowindow = new AMap.InfoWindow({
+                        anchor: 'top-center',
+                        content: `<div>已打卡${click}次</div>`
+                    })
+                    infowindow.open(map, item.getPosition())
+                    saveData(geojson.toGeoJSON())
+                })
+            })
+        }
+        map.add(geojson)
+
+        // 监听点击事件
+        map.on('click', function (e) {
+            var marker = new AMap.Marker({
+                position: e.lnglat,
+                extData: {
+                    _geoJsonProperties: {
+                        gid: geojson.getOverlays().length + 1,
+                        click: 0,
+                    }
+                }
+            })
+            // 监听覆盖物被点击的事件
+            marker.on('click', function (e) {
+                var ext = marker.getExtData()
+                var click = ++ext._geoJsonProperties.click
+
+                var infowindow = new AMap.InfoWindow({
+                    anchor: 'top-center',
+                    content: `<div>已打卡${click}次</div>`
+                })
+
+                infowindow.open(map, marker.getPosition())
+                saveData(geojson.toGeoJSON())
+            })
+            // map.add(marker)
+            geojson.addOverlay(marker)
+
+            saveData(geojson.toGeoJSON())
+        })
+
+        function startAnimation() {
+            AMap.plugin('AMap.Driving', function () {
+                var driving = new AMap.Driving({
+                    map: map,
+                    policy: AMap.DrivingPolicy.LEAST_TIME,
+                })
+                var start = new AMap.LngLat(104.137856, 30.672637)
+                var end = new AMap.LngLat(104.152738, 30.680893)
+
+                var opts = {
+                    waypoints: [],
+                }
+
+                geojson.eachOverlay(function (item) {
+                    opts.waypoints.push(item.getPosition())
+                })
+
+                driving.search(start, end, opts, function (status, result) {
+                    if (status == 'complete') {
+                        // console.log('ok')
+
+                        var lineArr = []
+
+                        result.routes[0].steps.forEach(function (item) {
+                            lineArr.push(...item.path)
+                        })
+
+                        var marker = new AMap.Marker({
+                            map: map,
+                            position: start,
+                            icon: "https://a.amap.com/jsapi_demos/static/demo-center-v2/car.png",
+                            offset: new AMap.Pixel(-13, -26),
+                            autoRotation: true,
+                            // angle: 0,
+                        })
+
+                        var passedPolyline = new AMap.Polyline({
+                            map: map,
+                            strokeColor: '#AF5',
+                            strokeweight: 6,
+                        })
+
+                        marker.on('moving', function (e) {
+                            passedPolyline.setPath(e.passedPath)
+                        })
+                        map.setFitView()
+
+                        marker.moveAlong(lineArr, {
+                            duration: 500,
+                            autoRotation: true,
+                        })
+                    } else {
+                        console.log('error')
+                    }
+                })
+            })
+
+        }
+
+    </script>
+
+</body>
+
+</html>
